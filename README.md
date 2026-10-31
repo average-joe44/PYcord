@@ -1,2 +1,20 @@
 # PYcord
-Python discord RAT
+## What is it
+PYcord is a Discord RAT that uses C2 concept and post-exploitation techniques.
+## Why i made it??
+If anyone ask, because i hate CGNAT, my router has been CGNAT'd and so i cannot do any port forwarding for my Watcher project.
+## Features
+PYcord featuring multiple cool commands you can use to control your targets, including:
+```
+.help  to show help
+.cd    to change directory
+.ls    to list directory
+.exe <command> to run windows command
+.hello to make sure if bot is running
+.marco to show latency
+.screenshot to screen shot
+.snapcam  to snap camera
+.keylog_start to start keylogger
+.keylog_read to read keylogger
+.keylog_stop to stop keylogger
+```
