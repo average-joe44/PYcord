@@ -119,7 +119,7 @@ async def download(ctx: commands.Context, file:str):
     payload.add_field('reqtype', 'fileupload')
     payload.add_field('userhash', '')
 
-    status = await ctx.send("processing file..")
+    await ctx.send("processing file..")
 
     try:
         if ext.lower() in BANNED_EXTENSIONS:
