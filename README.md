@@ -1,8 +1,6 @@
 # PYcord
 ## What is it
 PYcord is a Discord RAT that uses C2 concept and post-exploitation techniques.
-## Why i made it??
-If anyone ask, because i hate CGNAT, my router has been CGNAT'd and so i cannot do any port forwarding for my Watcher project.
 ## Features
 PYcord featuring multiple cool commands you can use to control your targets, including:
 ```
