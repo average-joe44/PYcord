@@ -482,7 +482,7 @@ async def help(ctx: commands.Context):
         ".recordmic <time> :: record audio and save it\n"
         ".stoprecord :: stop audio recording and sends the result\n"
         ".hide      :: hides the file from file explorer\n"
-        ".screenshare <url-ngrok-http> <port-ngrok-http> :: share screen from target and view it in browser\n"
+        ".screenshare <url-ngrok-http> :: share screen from target and view it in browser\n"
         ".stopsharing :: stop screenshare\n"
         "\n"
         "::FILE TRANSFER\n"
