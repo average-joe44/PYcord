@@ -42,4 +42,4 @@ if __name__ == '__main__':
         port = int(port)
         app.run(host="0.0.0.0", port=port, threaded=True)
     except:
-        print(f"usage: python {sys.argv[0]} <port-ngrok>")
+        print(f"usage: python {sys.argv[0]} <port>")
