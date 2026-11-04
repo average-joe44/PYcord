@@ -14,7 +14,7 @@ PYcord featuring multiple cool commands you can use to control your targets, inc
 .addstartup to add file to startup
 .recordmic <seconds> to record mic for
 .stoprecord to stop mic recording early
-.screenshare <url> to screen share from client to you through ngrok tunnel
+.screenshare <url> to screen share from client to you through tunnel
 .stopsharing to stop screen sharing
 
 .hello to make sure if bot is running
@@ -35,5 +35,5 @@ PYcord featuring multiple cool commands you can use to control your targets, inc
 .upload <url-with-file> to make file from a url uploaded into target
 ```
 ## NOTE
-In order to run screenshare function you'd have to install ngrok in your computer!!!  
+In order to run screenshare function you'd have to install a tunneling service in your computer!!!  
 And before you run the screenshare function, you have to run the serverScreenHolder first and bind it with your ngrok port.
