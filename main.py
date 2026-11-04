@@ -1,4 +1,4 @@
-import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, platform, sys, shutil, pyaudio, wave, threading, time
+import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, platform, sys, shutil, pyaudio, wave
 import discord, io, aiohttp
 import numpy as np
 
