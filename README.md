@@ -34,3 +34,6 @@ PYcord featuring multiple cool commands you can use to control your targets, inc
 .download <file> to make file from target into downloadable link
 .upload <url-with-file> to make file from a url uploaded into target
 ```
+## NOTE
+In order to run screenshare function you'd have to install ngrok in your computer!!!  
+And before you run the screenshare function, you have to run the serverScreenHolder first and bind it with your ngrok port.
