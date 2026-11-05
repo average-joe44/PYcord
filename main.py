@@ -173,8 +173,8 @@ async def download(ctx: commands.Context, file:str, time:str="24h"):
 
 async def size(ctx: commands.Context, file=None):
     try:
-        if not file:
-            ctx.send("enter a file to calculate their size")
+        if file is None:
+            await ctx.send("enter a file to calculate their size")
             return
         
         if os.path.exists(file) and os.path.isfile(file):
