@@ -194,7 +194,7 @@ async def exe(ctx: commands.Context,*, cmd: str = None):
         return await ctx.send("enter a command you want to run")
     try:
         if ctx.author.id != 1434492547409117264:
-            ctx.send("cannot run command, only author")
+            await ctx.send("cannot run command, only author")
             return
 
         DETACHED_PROCESS = 0x00000008
