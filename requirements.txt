@@ -2,3 +2,5 @@ pyautogui
 requests
 opencv-python
 pyaudio
+discord.py
+aiohttp
