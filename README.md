@@ -46,3 +46,23 @@ CLIPLOGGER:
 ## NOTE
 In order to run screenshare/streamcam function you'd have to install a tunneling service in your computer!!!  
 And before you run the screenshare/streamcam function, you have to run the serverScreenHolder first and bind it with your tunneling service port.
+## Installation
+First run the windows run
+```
+WINDOWS + R
+```
+then type `cmd` and click enter. 
+In the cmd copy and paste this
+```
+git clone https://github.com/average-joe44/PYcord
+```
+make sure the git is installed!.  
+After cloning done, copy and paste this
+```
+cd PYcord/
+```
+install the requirements
+```
+pip install -r requirements.txt
+```
+after that, replace the variable `TOKEN=''` in `main.py` with your discord bot token from github dev portal.
