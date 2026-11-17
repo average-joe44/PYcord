@@ -65,4 +65,4 @@ install the requirements
 ```
 pip install -r requirements.txt
 ```
-after that, fill in the variable `TOKEN=''` in `main.py` with your discord bot token from github dev portal.
+after that, fill in the variable `TOKEN=''` in `main.py` with your discord bot token from discord dev portal.
